@@ -1,10 +1,4 @@
-/**
- * copy from anzhiyu-hexo-music
- */
-// custom api
-var meting_api =
-  "https://meting.qjqq.cn/?server=:server&type=:type&id=:id&auth=:auth&r=:r";
-var anzhiyu_music = {
+var anzhiyu = {
   // 音乐节目切换背景
   changeMusicBg: function (isChangeBg = true) {
     if (window.location.pathname != "/music/") {
@@ -21,40 +15,44 @@ var anzhiyu_music = {
       let timer = setInterval(() => {
         const musiccover = document.querySelector("#anMusic-page .aplayer-pic");
         // 确保player加载完成
+        console.info(anMusicBg);
         if (musiccover) {
           clearInterval(timer);
+          anMusicBg.style.backgroundImage = musiccover.style.backgroundImage;
           // 绑定事件
-          anzhiyu_music.addEventListenerChangeMusicBg();
+          anzhiyu.addEventListenerChangeMusicBg();
+
+          // 暂停nav的音乐
+          if (
+            document.querySelector("#nav-music meting-js").aplayer &&
+            !document.querySelector("#nav-music meting-js").aplayer.audio.paused
+          ) {
+            anzhiyu.musicToggle();
+          }
         }
       }, 100);
     }
   },
   addEventListenerChangeMusicBg: function () {
     const anMusicPage = document.getElementById("anMusic-page");
-    const aplayerIconMenu = anMusicPage.querySelector(
-      ".aplayer-info .aplayer-time .aplayer-icon-menu"
-    );
+    const aplayerIconMenu = anMusicPage.querySelector(".aplayer-info .aplayer-time .aplayer-icon-menu");
 
-    anMusicPage
-      .querySelector("meting-js")
-      .aplayer.on("loadeddata", function () {
-        anzhiyu_music.changeMusicBg();
-        console.info("player loadeddata");
-      });
+    anMusicPage.querySelector("meting-js").aplayer.on("loadeddata", function () {
+      anzhiyu.changeMusicBg();
+      console.info("player loadeddata");
+    });
 
     aplayerIconMenu.addEventListener("click", function () {
       document.getElementById("menu-mask").style.display = "block";
-      document.getElementById("menu-mask").style.animation =
-        "0.5s ease 0s 1 normal none running to_show";
+      document.getElementById("menu-mask").style.animation = "0.5s ease 0s 1 normal none running to_show";
     });
 
     document.getElementById("menu-mask").addEventListener("click", function () {
       if (window.location.pathname != "/music/") return;
-      anMusicPage
-        .querySelector(".aplayer-list")
-        .classList.remove("aplayer-list-hide");
+      anMusicPage.querySelector(".aplayer-list").classList.remove("aplayer-list-hide");
     });
   },
 };
 
-anzhiyu_music.changeMusicBg(false);
+// 调用
+anzhiyu.changeMusicBg(false);

